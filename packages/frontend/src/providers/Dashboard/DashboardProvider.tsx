@@ -739,6 +739,52 @@ const DashboardProvider: React.FC<
         [dashboardTiles],
     );
 
+    const {
+        isInitialLoading: isLoadingDashboardFilters,
+        isFetching: isFetchingDashboardFilters,
+        data: dashboardAvailableFiltersData,
+    } = useDashboardsAvailableFilters(
+        savedChartUuidsAndTileUuids ?? [],
+        projectUuid,
+        embedToken,
+    );
+
+    const filterableFieldsByTileUuid = useMemo(() => {
+        // If this is an embed dashboard, we skip the dashboard check
+        if (
+            (!dashboard && !embedToken) ||
+            !dashboardTiles ||
+            !dashboardAvailableFiltersData
+        )
+            return;
+
+        const filterFieldsMapping = savedChartUuidsAndTileUuids?.reduce<
+            Record<string, FilterableDimension[]>
+        >((acc, { tileUuid }) => {
+            const filterFields =
+                dashboardAvailableFiltersData.savedQueryFilters[tileUuid]?.map(
+                    (index) =>
+                        dashboardAvailableFiltersData.allFilterableFields[
+                            index
+                        ],
+                );
+
+            if (filterFields) {
+                acc[tileUuid] = filterFields;
+            }
+
+            return acc;
+        }, {});
+
+        return filterFieldsMapping;
+    }, [
+        dashboard,
+        dashboardTiles,
+        dashboardAvailableFiltersData,
+        savedChartUuidsAndTileUuids,
+        embedToken,
+    ]);
+
     /**
      * Apply interactivity filtering for embedded dashboards
      */
@@ -801,8 +847,16 @@ const DashboardProvider: React.FC<
             const sdkFilters =
                 embed.mode === 'sdk' && embed.filters ? embed.filters : [];
             if (sdkFilters.length > 0) {
+                // Wait for filterableFieldsByTileUuid so we can
+                // build proper tileTargets for cross-explore mapping
+                if (!filterableFieldsByTileUuid) return;
+
                 updatedDashboardFilters.dimensions = sdkFilters.map(
-                    (sdkFilter) => convertSdkFilterToDashboardFilter(sdkFilter),
+                    (sdkFilter) =>
+                        convertSdkFilterToDashboardFilter(
+                            sdkFilter,
+                            filterableFieldsByTileUuid,
+                        ),
                 );
             }
 
@@ -852,6 +906,7 @@ const DashboardProvider: React.FC<
         overridesForSavedDashboardFilters,
         embed,
         applyInteractivityFiltering,
+        filterableFieldsByTileUuid,
     ]);
 
     // Updates url with temp and overridden filters and deep compare to avoid unnecessary re-renders for dashboardTemporaryFilters
@@ -1031,52 +1086,6 @@ const DashboardProvider: React.FC<
         dateZoomGranularity,
         defaultDateZoomGranularity,
         setDateZoomGranularity,
-    ]);
-
-    const {
-        isInitialLoading: isLoadingDashboardFilters,
-        isFetching: isFetchingDashboardFilters,
-        data: dashboardAvailableFiltersData,
-    } = useDashboardsAvailableFilters(
-        savedChartUuidsAndTileUuids ?? [],
-        projectUuid,
-        embedToken,
-    );
-
-    const filterableFieldsByTileUuid = useMemo(() => {
-        // If this is an embed dashboard, we skip the dashboard check
-        if (
-            (!dashboard && !embedToken) ||
-            !dashboardTiles ||
-            !dashboardAvailableFiltersData
-        )
-            return;
-
-        const filterFieldsMapping = savedChartUuidsAndTileUuids?.reduce<
-            Record<string, FilterableDimension[]>
-        >((acc, { tileUuid }) => {
-            const filterFields =
-                dashboardAvailableFiltersData.savedQueryFilters[tileUuid]?.map(
-                    (index) =>
-                        dashboardAvailableFiltersData.allFilterableFields[
-                            index
-                        ],
-                );
-
-            if (filterFields) {
-                acc[tileUuid] = filterFields;
-            }
-
-            return acc;
-        }, {});
-
-        return filterFieldsMapping;
-    }, [
-        dashboard,
-        dashboardTiles,
-        dashboardAvailableFiltersData,
-        savedChartUuidsAndTileUuids,
-        embedToken,
     ]);
 
     const allFilterableFieldsMap = useMemo(() => {
