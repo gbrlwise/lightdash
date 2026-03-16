@@ -1415,6 +1415,7 @@ export class CatalogService<
             },
             tablesConfiguration:
                 await this.projectModel.getTablesConfiguration(projectUuid),
+            hasTimeDimension: true,
         });
 
         const filteredMetrics = allCatalogMetrics.data.filter(
@@ -1433,6 +1434,50 @@ export class CatalogService<
         });
 
         return getAvailableCompareMetrics(allMetrics);
+    }
+
+    async getPaginatedMetricsWithTimeDimensions(
+        user: SessionUser,
+        projectUuid: string,
+        context: CatalogSearchContext,
+        paginateArgs: KnexPaginateArgs,
+        sortArgs?: ApiSort,
+        tableName?: string,
+    ): Promise<KnexPaginatedData<CatalogField[]>> {
+        const { organizationUuid } =
+            await this.projectModel.getSummary(projectUuid);
+        if (
+            user.ability.cannot(
+                'view',
+                subject('Project', { organizationUuid, projectUuid }),
+            )
+        ) {
+            throw new ForbiddenError();
+        }
+
+        const userAttributes =
+            await this.userAttributesModel.getAttributeValuesForOrgMember({
+                organizationUuid,
+                userUuid: user.userUuid,
+            });
+
+        const results = await this.catalogModel.search({
+            projectUuid,
+            userAttributes,
+            ...(tableName ? { exploreName: tableName } : {}),
+            context,
+            catalogSearch: {
+                type: CatalogType.Field,
+                filter: CatalogFilter.Metrics,
+            },
+            tablesConfiguration:
+                await this.projectModel.getTablesConfiguration(projectUuid),
+            hasTimeDimension: true,
+            paginateArgs,
+            sortArgs,
+        });
+
+        return results as KnexPaginatedData<CatalogField[]>;
     }
 
     async getFilterDimensions(
